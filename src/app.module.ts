@@ -9,15 +9,28 @@ import { BookingsModule } from './bookings/bookings.module';
 import { SettingsModule } from './settings/settings.module';
 import { BlockedSlotsModule } from './blocked-slots/blocked-slots.module';
 import { ServicesModule } from './services-module/services.module';
+import { UsersModule } from './users/users.module';
+import { AuthModule } from './auth/auth.module';
+import { RedisModule } from './redis/redis.module';
+import { JwtModule } from '@nestjs/jwt';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
-    ConfigModule.forRoot(), // загружает .env
-    TypeOrmModule.forRootAsync({
-      imports: [
-        ConfigModule.forRoot(),
-
+    ConfigModule.forRoot({
+      isGlobal: true, // теперь ConfigService доступен везде без импорта
+    }),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60000,
+          limit: 10,
+        },
       ],
+    }),
+    // загружает .env
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule.forRoot()],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
@@ -36,6 +49,9 @@ import { ServicesModule } from './services-module/services.module';
     BookingsModule,
     SettingsModule,
     BlockedSlotsModule,
+    UsersModule,
+    AuthModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],

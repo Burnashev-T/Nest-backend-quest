@@ -1,3 +1,4 @@
+// settings/settings.controller.ts
 import {
   Controller,
   Get,
@@ -6,39 +7,47 @@ import {
   Patch,
   Param,
   Delete,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { UpdateSettingDto } from './dto/update-setting.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../users/entities/user.entity';
 
 @ApiTags('settings')
 @Controller('settings')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.SUPERADMIN) // только суперадмин
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
   @Post()
-  create(@Body() createDto: CreateSettingDto) {
+  async create(@Body() createDto: CreateSettingDto) {
     return this.settingsService.create(createDto);
   }
 
   @Get()
-  findAll() {
+  async findAll() {
     return this.settingsService.findAll();
   }
 
   @Get(':key')
-  findOne(@Param('key') key: string) {
+  async findOne(@Param('key') key: string) {
     return this.settingsService.findOne(key);
   }
 
   @Patch(':key')
-  update(@Param('key') key: string, @Body() updateDto: UpdateSettingDto) {
+  async update(@Param('key') key: string, @Body() updateDto: UpdateSettingDto) {
     return this.settingsService.update(key, updateDto);
   }
 
   @Delete(':key')
-  remove(@Param('key') key: string) {
+  async remove(@Param('key') key: string) {
     return this.settingsService.remove(key);
   }
 }
