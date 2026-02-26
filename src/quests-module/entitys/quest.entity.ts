@@ -46,3 +46,4 @@ export class Quest {
   @ApiProperty()
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
+}
