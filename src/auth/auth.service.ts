@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   Inject,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -141,5 +142,17 @@ export class AuthService {
   async logout(userId: number, refreshToken: string) {
     await this.redisService.del(`refresh:${userId}:${refreshToken}`);
     return { success: true };
+  }
+
+  async getProfile(userId: number) {
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    return {
+      id: user.id,
+      phone: user.phone,
+      role: user.role,
+      name: user.name,
+      isPhoneConfirmed: user.isPhoneConfirmed,
+    };
   }
 }

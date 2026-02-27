@@ -4,6 +4,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { ConfigService } from '@nestjs/config';
@@ -57,29 +58,42 @@ export class MinioService {
     return `${this.publicEndpoint}/${this.bucket}/${key}`;
   }
 
-  // Удаление файла по ключу
-  async deleteFile(key: string): Promise<void> {
-    const command = new DeleteObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-    });
-    await this.s3Client.send(command);
+  async fileExists(key: string): Promise<boolean> {
+    try {
+      const command = new HeadObjectCommand({ Bucket: this.bucket, Key: key });
+      await this.s3Client.send(command);
+      return true;
+    } catch (error) {
+      if (error.name === 'NotFound') return false;
+      throw error;
+    }
   }
 
+  // Удаление файла по ключу
+  async deleteFile(key: string): Promise<void> {
+    try {
+      const command = new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      });
+      await this.s3Client.send(command);
+    } catch (error) {
+      console.error(`Failed to delete file ${key} from MinIO:`, error);
+      throw error; // пробрасываем дальше, если нужно
+    }
+  }
 
-// внутри класса MinioService
-async listObjects(prefix?: string): Promise<string[]> {
-  const command = new ListObjectsV2Command({
-    Bucket: this.bucket,
-    Prefix: prefix, // например, 'quests/' для фильтрации по папке
-  });
-  const response = await this.s3Client.send(command);
-  const objects = response.Contents || [];
-  // @ts-ignore
-  return objects.map(obj => obj.Key).filter(key => key); // отфильтровываем возможные undefined
-}
+  // внутри класса MinioService
+  async listObjects(prefix?: string): Promise<string[]> {
+    const command = new ListObjectsV2Command({
+      Bucket: this.bucket,
+      Prefix: prefix, // например, 'quests/' для фильтрации по папке
+    });
+    const response = await this.s3Client.send(command);
+    const objects = response.Contents || [];
 
-
+    return objects.map((obj) => obj.Key).filter((key): key is string => !!key);
+  }
 
   // Генерация временной ссылки для чтения (если бакет приватный)
   async generatePresignedGetUrl(
@@ -95,12 +109,9 @@ async listObjects(prefix?: string): Promise<string[]> {
 
   // Вспомогательный метод для извлечения ключа из полного URL
   extractKeyFromUrl(url: string): string | null {
-    // Ожидаем формат: http(s)://host:port/bucket/key
-    const parts = url.split('/');
-    // Индекс бакета в пути зависит от forcePathStyle (всегда после хоста)
-    // При forcePathStyle: true URL = endpoint/bucket/key
-    const bucketIndex = parts.findIndex((part) => part === this.bucket);
-    if (bucketIndex === -1) return null;
-    return parts.slice(bucketIndex + 1).join('/');
+    const prefix = `/${this.bucket}/`;
+    const index = url.indexOf(prefix);
+    if (index === -1) return null;
+    return url.substring(index + prefix.length);
   }
 }

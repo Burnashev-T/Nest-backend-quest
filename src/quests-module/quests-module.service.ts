@@ -16,88 +16,69 @@ export class QuestsService {
 
   async create(createQuestDto: CreateQuestDto): Promise<Quest> {
     const quest = this.questRepository.create(createQuestDto);
-
     return this.questRepository.save(quest);
   }
-  async findAll(): Promise<Quest[]> {
-    const quests = await this.questRepository.find();
-    if (!quests) return [];
 
-    await Promise.all(
-      quests.map(async (quest) => {
-        if (quest.images) {
-          quest.images = await Promise.all(
-            quest.images.map(async (url) => {
-              const key = this.minioService.extractKeyFromUrl(url);
-              if (key) {
-                return await this.minioService.generatePresignedGetUrl(key);
-              }
-              return url;
-            }),
-          );
-        }
-      }),
+  async findAll(): Promise<any[]> {
+    const quests = await this.questRepository.find();
+    return Promise.all(
+      quests.map(async (quest) => ({
+        ...quest,
+        images: await Promise.all(
+          (quest.images || []).map(async (key) => ({
+            key,
+            url: await this.minioService.generatePresignedGetUrl(key),
+          })),
+        ),
+      })),
     );
-    return quests;
   }
 
-  async findOne(id: number): Promise<Quest> {
+  async findOne(id: number): Promise<any> {
     const quest = await this.questRepository.findOneBy({ id });
     if (!quest) throw new NotFoundException();
 
-    if (quest.images && Array.isArray(quest.images)) {
-      quest.images = await Promise.all(
-        quest.images.map(async (url) => {
-          const key = this.minioService.extractKeyFromUrl(url);
-          if (key) {
-            return await this.minioService.generatePresignedGetUrl(key);
-          }
-          return url;
-        }),
-      );
-    }
-    return quest;
+    // Создаём массив объектов { key, url }
+    const images = await Promise.all(
+      (quest.images || []).map(async (key) => ({
+        key,
+        url: await this.minioService.generatePresignedGetUrl(key),
+      })),
+    );
+
+    // Возвращаем квест с заменённым полем images
+    return { ...quest, images };
   }
 
   async update(id: number, updateQuestDto: UpdateQuestDto): Promise<Quest> {
     const quest = await this.findOne(id);
-    const oldImages = quest.images || [];
+    const oldImageKeys = quest.images || [];
 
-    // Обновляем данные
     Object.assign(quest, updateQuestDto);
     const updated = await this.questRepository.save(quest);
 
-    // Удаляем изображения, которые были заменены (если новые переданы и старые не входят в новый массив)
-    if (updateQuestDto.images) {
-      if (Array.isArray(updateQuestDto.images)) {
-        const toDelete = oldImages.filter((img) => {
-          // @ts-ignore
-          const { includes } = updateQuestDto.images;
-          return !includes(img);
-        });
-        for (const imgUrl of toDelete) {
-          const key = this.minioService.extractKeyFromUrl(imgUrl);
-          if (key) {
-            await this.minioService
-              .deleteFile(key)
-              .catch((err) => console.error('Delete failed', err));
-          }
-        }
+    const newImageKeys = updateQuestDto.images;
+    if (newImageKeys && Array.isArray(newImageKeys)) {
+      const toDelete = oldImageKeys.filter(
+        (key) => !newImageKeys.includes(key),
+      );
+      for (const key of toDelete) {
+        await this.minioService
+          .deleteFile(key)
+          .catch((err) => console.error('Delete failed', err));
       }
     }
-
     return updated;
   }
 
   async remove(id: number): Promise<void> {
     const quest = await this.findOne(id);
     // Удаляем все связанные изображения
-    for (const imgUrl of quest.images || []) {
-      const key = this.minioService.extractKeyFromUrl(imgUrl);
-      if (key) {
-        await this.minioService
-          .deleteFile(key)
-          .catch((err) => console.error('Delete failed', err));
+    for (const key of quest.images || []) {
+      try {
+        await this.minioService.deleteFile(key);
+      } catch (err) {
+        console.error(`Failed to delete file ${key}:`, err);
       }
     }
     await this.questRepository.remove(quest);

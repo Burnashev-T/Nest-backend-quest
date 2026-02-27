@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, Get } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { SendCodeDto } from './dto/send-code.dto';
@@ -45,5 +45,13 @@ export class AuthController {
     // req.user должен содержать userId (добавится в стратегии)
     const user: any = req.user;
     return this.authService.logout(user.userId, dto.refreshToken);
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  getProfile(@Req() req: any) {
+    // req.user заполняется в JwtStrategy (содержит userId, role)
+    return this.authService.getProfile(req.user.userId);
   }
 }
