@@ -15,6 +15,7 @@ import { BookingStatus } from './entities/booking-enum.entity';
 import { Service } from '../services-module/entitys/services.entity';
 
 const MIN_DEPOSIT = 1500; // минимальная предоплата
+const MIN_LEAD_HOURS = 6; // минимальное количество часов до начала брони
 
 @Injectable()
 export class BookingsService {
@@ -51,7 +52,14 @@ export class BookingsService {
   ): boolean {
     return Math.max(s1, s2) < Math.min(e1, e2);
   }
+  private getCurrentMinutes(): number {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  }
 
+  private getCurrentDateString(): string {
+    return new Date().toISOString().split('T')[0];
+  }
   // --- Получение глобальных настроек ---
   private async getScheduleSettings() {
     // Значения по умолчанию, если настройки ещё не заданы
@@ -108,12 +116,15 @@ export class BookingsService {
     const startM = this.timeToMinutes(start);
     const endM = this.timeToMinutes(end);
 
-    // Проверка броней
+    // Проверяем все брони (включая PENDING) на эту дату
     const bookings = await this.bookingRepository.find({
       where: {
-        quest: { id: questId },
         date,
-        status: In([BookingStatus.DEPOSIT_PAID, BookingStatus.CONFIRMED]),
+        status: In([
+          BookingStatus.PENDING,
+          BookingStatus.DEPOSIT_PAID,
+          BookingStatus.CONFIRMED,
+        ]),
       },
     });
     for (const b of bookings) {
@@ -122,7 +133,7 @@ export class BookingsService {
       if (this.intervalsOverlap(startM, endM, bStart, bEnd)) return false;
     }
 
-    // Проверка блокировок
+    // Блокировки остаются по квесту
     const blocked = await this.blockedSlotsService.findByQuestAndDate(
       questId,
       date,
@@ -136,21 +147,23 @@ export class BookingsService {
     return true;
   }
 
-  // --- Получение свободных интервалов на дату ---
   async getAvailableSlots(
     questId: number,
     date: string,
   ): Promise<{ start: string; end: string }[]> {
     const settings = await this.getScheduleSettings();
-    // Используем обычные часы как границы рабочего дня (можно расширить, если нужно учитывать ранние/поздние)
     const dayStart = settings.normal.start;
     const dayEnd = settings.normal.end;
 
+    // Все брони на дату
     const bookings = await this.bookingRepository.find({
       where: {
-        quest: { id: questId },
         date,
-        status: In([BookingStatus.DEPOSIT_PAID, BookingStatus.CONFIRMED]),
+        status: In([
+          BookingStatus.PENDING,
+          BookingStatus.DEPOSIT_PAID,
+          BookingStatus.CONFIRMED,
+        ]),
       },
       order: { startTime: 'ASC' },
     });
@@ -188,10 +201,8 @@ export class BookingsService {
         end: this.minutesToTime(dayEnd),
       });
     }
-
     return freeSlots;
   }
-
   // --- Создание брони ---
   async create(
     createBookingDto: CreateBookingDto,
@@ -202,6 +213,23 @@ export class BookingsService {
     });
     if (!quest) throw new NotFoundException('Квест не найден');
     if (!quest.isActive) throw new BadRequestException('Квест не активен');
+
+    // Проверка на активные брони пользователя
+    const activeBookings = await this.bookingRepository.find({
+      where: {
+        userId,
+        status: In([
+          BookingStatus.PENDING,
+          BookingStatus.DEPOSIT_PAID,
+          BookingStatus.CONFIRMED,
+        ]),
+      },
+    });
+    if (activeBookings.length > 0) {
+      throw new BadRequestException(
+        'У вас уже есть активная бронь. Дождитесь её завершения или отмените её, чтобы создать новую.',
+      );
+    }
 
     // Преобразуем время в минуты
     const startM = this.timeToMinutes(createBookingDto.startTime);
@@ -290,6 +318,17 @@ export class BookingsService {
     return this.bookingRepository.find({ relations: ['quest', 'services'] });
   }
 
+  async cancel(id: number): Promise<Booking> {
+    const booking = await this.findOne(id);
+    if (
+      booking.status === BookingStatus.CANCELLED ||
+      booking.status === BookingStatus.COMPLETED
+    ) {
+      throw new BadRequestException('Бронь уже отменена или завершена');
+    }
+    booking.status = BookingStatus.CANCELLED;
+    return this.bookingRepository.save(booking);
+  }
   // --- Получение брони по ID ---
   async findOne(id: number): Promise<Booking> {
     const booking = await this.bookingRepository.findOne({
@@ -306,5 +345,22 @@ export class BookingsService {
       where: { userId },
       relations: ['quest', 'services'],
     });
+  }
+
+  async getStats() {
+    const total = await this.bookingRepository.count();
+    const today = new Date().toISOString().split('T')[0];
+    const todayBookings = await this.bookingRepository.count({
+      where: { date: today },
+    });
+    const totalRevenue = await this.bookingRepository
+      .createQueryBuilder('booking')
+      .select('SUM(booking.totalDeposit)', 'sum')
+      .where('booking.status = :status', { status: BookingStatus.DEPOSIT_PAID })
+      .orWhere('booking.status = :confirmed', {
+        confirmed: BookingStatus.CONFIRMED,
+      })
+      .getRawOne();
+    return { total, todayBookings, totalRevenue: totalRevenue.sum || 0 };
   }
 }

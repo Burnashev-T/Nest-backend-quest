@@ -7,6 +7,8 @@ import {
   Param,
   Query,
   UseGuards,
+  ForbiddenException,
+  Patch,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { BookingsService } from './bookings.service';
@@ -36,7 +38,8 @@ export class BookingsController {
   // Для авторизованных пользователей
   @Post()
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.USER, UserRole.ADMIN, UserRole.SUPERADMIN) // добавьте USER
   async create(
     @Body() createBookingDto: CreateBookingDto,
     @CurrentUser() user: any,
@@ -46,7 +49,7 @@ export class BookingsController {
 
   @Get('my')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   async findMy(@CurrentUser() user: any) {
     return this.bookingsService.findByUser(user.userId);
   }
@@ -67,7 +70,30 @@ export class BookingsController {
   async findOne(@Param('id') id: string) {
     return this.bookingsService.findOne(+id);
   }
+  @Get('stats')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
+  async getStats() {
+    return this.bookingsService.getStats();
+  }
 
+  @Patch(':id/cancel')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async cancel(@Param('id') id: string, @CurrentUser() user: any) {
+    const booking = await this.bookingsService.findOne(+id);
+    if (booking.userId !== user.userId) {
+      throw new ForbiddenException('Вы можете отменять только свои брони');
+    }
+    return this.bookingsService.cancel(+id);
+  }
 
-
+  @Patch(':id/cancel-admin')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
+  async cancelAdmin(@Param('id') id: string) {
+    return this.bookingsService.cancel(+id);
+  }
 }

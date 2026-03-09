@@ -25,7 +25,9 @@ import { UserRole } from '../users/entities/user.entity';
 @Roles(UserRole.SUPERADMIN) // только суперадмин
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
-
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPERADMIN)
   @Post()
   async create(@Body() createDto: CreateSettingDto) {
     return this.settingsService.create(createDto);
@@ -40,12 +42,16 @@ export class SettingsController {
   async findOne(@Param('key') key: string) {
     return this.settingsService.findOne(key);
   }
-
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPERADMIN)
   @Patch(':key')
   async update(@Param('key') key: string, @Body() updateDto: UpdateSettingDto) {
     return this.settingsService.update(key, updateDto);
   }
-
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPERADMIN)
   @Delete(':key')
   async remove(@Param('key') key: string) {
     return this.settingsService.remove(key);

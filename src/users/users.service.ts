@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -57,5 +57,10 @@ export class UsersService {
   async remove(id: number): Promise<void> {
     const result = await this.usersRepository.delete(id);
     if (result.affected === 0) throw new NotFoundException('User not found');
+  }
+  async updateRole(id: number, role: UserRole): Promise<User> {
+    const user = await this.findOne(id); // метод findOne уже должен быть
+    user.role = role;
+    return this.usersRepository.save(user);
   }
 }
