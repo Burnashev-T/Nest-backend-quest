@@ -41,6 +41,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
         database: configService.get('DB_DATABASE'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: true,
+        // logging: true, // добавьте эту строку
       }),
     }),
     QuestsModuleModule,

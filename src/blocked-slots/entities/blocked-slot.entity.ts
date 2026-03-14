@@ -9,9 +9,9 @@ export class BlockedSlot {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ApiProperty({ type: () => Quest })
-  @ManyToOne(() => Quest, { onDelete: 'CASCADE' })
-  quest: Quest;
+  @ApiProperty({ type: () => Quest, nullable: true })
+  @ManyToOne(() => Quest, { onDelete: 'CASCADE', nullable: true })
+  quest: Quest | null;
 
   @ApiProperty({ example: '2025-06-15' })
   @Column({ type: 'date' })

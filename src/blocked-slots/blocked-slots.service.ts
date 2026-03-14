@@ -1,7 +1,10 @@
-// blocked-slots/blocked-slots.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { BlockedSlot } from './entities/blocked-slot.entity';
 import { CreateBlockedSlotDto } from './dto/create-blocked-slot.dto';
 import { UpdateBlockedSlotDto } from './dto/update-blocked-slot.dto';
@@ -17,10 +20,24 @@ export class BlockedSlotsService {
   ) {}
 
   async create(createDto: CreateBlockedSlotDto): Promise<BlockedSlot> {
-    const quest = await this.questRepository.findOneBy({
-      id: createDto.questId,
+    // Проверка на существование аналогичной блокировки
+    const existing = await this.blockedSlotRepository.findOne({
+      where: {
+        quest: createDto.questId ? { id: createDto.questId } : IsNull(),
+        date: createDto.date,
+        startTime: createDto.startTime,
+        endTime: createDto.endTime,
+      },
     });
-    if (!quest) throw new NotFoundException('Квест не найден');
+    if (existing) {
+      throw new BadRequestException('Такая блокировка уже существует');
+    }
+
+    let quest: Quest | null = null;
+    if (createDto.questId) {
+      quest = await this.questRepository.findOneBy({ id: createDto.questId });
+      if (!quest) throw new NotFoundException('Квест не найден');
+    }
 
     const slot = this.blockedSlotRepository.create({
       quest,
@@ -36,6 +53,13 @@ export class BlockedSlotsService {
     return this.blockedSlotRepository.find({ relations: ['quest'] });
   }
 
+  async findByDate(date: string): Promise<BlockedSlot[]> {
+    return this.blockedSlotRepository.find({
+      where: { date },
+      relations: ['quest'],
+    });
+  }
+
   async findOne(id: number): Promise<BlockedSlot> {
     const slot = await this.blockedSlotRepository.findOne({
       where: { id },
@@ -49,9 +73,16 @@ export class BlockedSlotsService {
     questId: number,
     date: string,
   ): Promise<BlockedSlot[]> {
-    return this.blockedSlotRepository.find({
-      where: { quest: { id: questId }, date },
+    console.log('findByQuestAndDate called with:', { questId, date });
+    const result = await this.blockedSlotRepository.find({
+      where: [
+        { quest: { id: questId }, date },
+        { quest: IsNull(), date },
+      ],
+      relations: ['quest'],
     });
+    console.log('findByQuestAndDate result:', result);
+    return result;
   }
 
   async update(

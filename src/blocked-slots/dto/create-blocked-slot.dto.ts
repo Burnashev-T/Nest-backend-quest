@@ -1,11 +1,11 @@
-// blocked-slots/dto/create-blocked-slot.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNumber, IsDateString, IsString, IsOptional } from 'class-validator';
 
 export class CreateBlockedSlotDto {
-  @ApiProperty()
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsNumber()
-  questId: number;
+  questId?: number;
 
   @ApiProperty({ example: '2025-06-15' })
   @IsDateString()

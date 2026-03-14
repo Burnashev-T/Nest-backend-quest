@@ -115,8 +115,11 @@ export class BookingsService {
   ): Promise<boolean> {
     const startM = this.timeToMinutes(start);
     const endM = this.timeToMinutes(end);
+    console.log(
+      `isTimeSlotAvailable: date=${date}, start=${start} (${startM}), end=${end} (${endM})`,
+    );
 
-    // Проверяем все брони (включая PENDING) на эту дату
+    // Проверка броней
     const bookings = await this.bookingRepository.find({
       where: {
         date,
@@ -127,26 +130,43 @@ export class BookingsService {
         ]),
       },
     });
+    console.log(
+      'Active bookings:',
+      bookings.map((b) => `${b.startTime}-${b.endTime}`),
+    );
     for (const b of bookings) {
       const bStart = this.timeToMinutes(b.startTime);
       const bEnd = this.timeToMinutes(b.endTime);
-      if (this.intervalsOverlap(startM, endM, bStart, bEnd)) return false;
+      if (this.intervalsOverlap(startM, endM, bStart, bEnd)) {
+        console.log('Overlap with booking', b.id);
+        return false;
+      }
     }
 
-    // Блокировки остаются по квесту
+    // Проверка блокировок
     const blocked = await this.blockedSlotsService.findByQuestAndDate(
       questId,
       date,
     );
+    console.log(
+      'Blocked intervals:',
+      blocked.map((b) => `${b.startTime}-${b.endTime}`),
+    );
     for (const b of blocked) {
       const bStart = this.timeToMinutes(b.startTime);
       const bEnd = this.timeToMinutes(b.endTime);
-      if (this.intervalsOverlap(startM, endM, bStart, bEnd)) return false;
+      console.log(
+        `Checking blocked: ${b.startTime} (${bStart})-${b.endTime} (${bEnd})`,
+      );
+      if (this.intervalsOverlap(startM, endM, bStart, bEnd)) {
+        console.log('OVERLAP with blocked slot', b.id);
+        return false;
+      }
     }
 
+    console.log('Time slot is available');
     return true;
   }
-
   async getAvailableSlots(
     questId: number,
     date: string,
@@ -154,7 +174,12 @@ export class BookingsService {
     const settings = await this.getScheduleSettings();
     const dayStart = settings.normal.start;
     const dayEnd = settings.normal.end;
-
+    // Получаем все блокировки на эту дату
+    const allBlocked = await this.blockedSlotsService.findByDate(date);
+    // Фильтруем: оставляем либо глобальные (quest === null), либо для этого квеста
+    const relevantBlocked = allBlocked.filter(
+      (b) => !b.quest || b.quest.id === questId,
+    );
     // Все брони на дату
     const bookings = await this.bookingRepository.find({
       where: {
@@ -171,7 +196,7 @@ export class BookingsService {
       questId,
       date,
     );
-
+    console.log('Blocked intervals for availability:', blocked);
     const busyIntervals = [
       ...bookings.map((b) => ({
         start: this.timeToMinutes(b.startTime),
