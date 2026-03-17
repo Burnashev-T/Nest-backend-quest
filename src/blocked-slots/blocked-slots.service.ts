@@ -9,6 +9,8 @@ import { BlockedSlot } from './entities/blocked-slot.entity';
 import { CreateBlockedSlotDto } from './dto/create-blocked-slot.dto';
 import { UpdateBlockedSlotDto } from './dto/update-blocked-slot.dto';
 import { Quest } from '../quests-module/entitys/quest.entity';
+import { Booking } from '../bookings/entities/booking.entity';
+import { BookingStatus } from '../bookings/entities/booking-enum.entity';
 
 @Injectable()
 export class BlockedSlotsService {
@@ -17,10 +19,27 @@ export class BlockedSlotsService {
     private blockedSlotRepository: Repository<BlockedSlot>,
     @InjectRepository(Quest)
     private questRepository: Repository<Quest>,
+    @InjectRepository(Booking)
+    private bookingRepository: Repository<Booking>,
   ) {}
 
+  async deleteOldBlockedSlots(days: number = 14): Promise<number> {
+    const thresholdDate = new Date();
+    thresholdDate.setDate(thresholdDate.getDate() - days);
+    const thresholdDateStr = thresholdDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    const result = await this.blockedSlotRepository
+      .createQueryBuilder()
+      .delete()
+      .where('date <= :thresholdDate', { thresholdDate: thresholdDateStr })
+      .execute();
+    return result.affected || 0;
+  }
+
   async create(createDto: CreateBlockedSlotDto): Promise<BlockedSlot> {
-    // Проверка на существование аналогичной блокировки
+    // 1. Удаляем старые блокировки
+    await this.deleteOldBlockedSlots();
+
+    // 2. Проверка на дубликат
     const existing = await this.blockedSlotRepository.findOne({
       where: {
         quest: createDto.questId ? { id: createDto.questId } : IsNull(),
@@ -31,6 +50,29 @@ export class BlockedSlotsService {
     });
     if (existing) {
       throw new BadRequestException('Такая блокировка уже существует');
+    }
+
+    // 3. Проверка на активные брони на этот интервал
+    const activeBookings = await this.bookingRepository
+      .createQueryBuilder('booking')
+      .where('booking.date = :date', { date: createDto.date })
+      .andWhere('booking.status IN (:...statuses)', {
+        statuses: [
+          BookingStatus.PENDING,
+          BookingStatus.DEPOSIT_PAID,
+          BookingStatus.CONFIRMED,
+        ],
+      })
+      .andWhere('(booking.startTime < :end AND booking.endTime > :start)', {
+        start: createDto.startTime,
+        end: createDto.endTime,
+      })
+      .getMany();
+
+    if (activeBookings.length > 0) {
+      throw new BadRequestException(
+        'Невозможно создать блокировку: на это время уже есть бронирования',
+      );
     }
 
     let quest: Quest | null = null;
