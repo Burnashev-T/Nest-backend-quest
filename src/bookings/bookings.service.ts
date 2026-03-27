@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -13,6 +14,8 @@ import { BlockedSlotsService } from '../blocked-slots/blocked-slots.service';
 import { SettingsService } from '../settings/settings.service';
 import { BookingStatus } from './entities/booking-enum.entity';
 import { Service } from '../services-module/entitys/services.entity';
+import { UsersService } from '../users/users.service';
+import { AdminCreateBookingDto } from './dto/admin-create-booking.dto';
 
 const MIN_DEPOSIT = 1500; // минимальная предоплата
 const MIN_LEAD_HOURS = 6; // минимальное количество часов до начала брони
@@ -28,6 +31,7 @@ export class BookingsService {
     private serviceRepository: Repository<Service>,
     private blockedSlotsService: BlockedSlotsService,
     private settingsService: SettingsService,
+    private usersService: UsersService,
   ) {}
 
   // --- Вспомогательные методы ---
@@ -237,7 +241,10 @@ export class BookingsService {
       id: createBookingDto.questId,
     });
     if (!quest) throw new NotFoundException('Квест не найден');
-    if (!quest.isActive) throw new BadRequestException('Квест не активен');
+    if (!quest.isActive)
+      throw new BadRequestException(
+        'Квест не активен или больше не проводиться',
+      );
 
     // Проверка на активные брони пользователя
     const activeBookings = await this.bookingRepository.find({
@@ -289,8 +296,15 @@ export class BookingsService {
     const durationMinutes = endM - startM;
     const hours = Math.ceil(durationMinutes / 60);
 
+    const maxHoursForUser = 3;
+    const user = await this.usersService.findById(userId);
+    if (user && user.role === 'user' && hours > maxHoursForUser) {
+      throw new BadRequestException(
+        `Максимальная длительность брони для обычных пользователей — ${maxHoursForUser} часа. Для бронирования более длительных мероприятий обратитесь к администратору или внесите предоплату.`,
+      );
+    }
     // Стоимость квеста (без учёта доплат за время)
-    const totalQuestPrice = hourlyRate * hours;
+    const totalQuestPrice = hourlyRate + hours;
 
     // Доплата за ранние/поздние часы
     const settings = await this.getScheduleSettings();
@@ -387,5 +401,104 @@ export class BookingsService {
       })
       .getRawOne();
     return { total, todayBookings, totalRevenue: totalRevenue.sum || 0 };
+  }
+
+  async adminCreate(
+    createDto: AdminCreateBookingDto,
+    adminId: number,
+  ): Promise<Booking> {
+    // Проверка пользователя
+    const user = await this.usersService.findById(createDto.userId);
+    if (!user) throw new NotFoundException('Пользователь не найден');
+
+    const quest = await this.questRepository.findOneBy({
+      id: createDto.questId,
+    });
+    if (!quest) throw new NotFoundException('Квест не найден');
+    if (!quest.isActive) throw new BadRequestException('Квест не активен');
+
+    const startM = this.timeToMinutes(createDto.startTime);
+    const endM = this.timeToMinutes(createDto.endTime);
+    if (endM <= startM) {
+      throw new BadRequestException(
+        'Время окончания должно быть позже времени начала',
+      );
+    }
+
+    // Проверка доступности
+    const available = await this.isTimeSlotAvailable(
+      quest.id,
+      createDto.date,
+      createDto.startTime,
+      createDto.endTime,
+    );
+    if (!available) throw new BadRequestException('Выбранное время недоступно');
+
+    const childrenCount = createDto.childrenCount;
+
+    let hourlyRate = Number(quest.basePricePerHour);
+    if (childrenCount > 4) {
+      const extraPeople = childrenCount - 4;
+      hourlyRate += extraPeople * Number(quest.extraPlayerPrice);
+    }
+
+    const durationMinutes = endM - startM;
+    const hours = Math.ceil(durationMinutes / 60);
+    const totalQuestPrice = hourlyRate * hours;
+
+    // Доплата за ранние/поздние часы
+    const settings = await this.getScheduleSettings();
+    let surcharge = 0;
+    for (let t = startM; t < endM; t++) {
+      if (t >= settings.early.start && t < settings.early.end) {
+        surcharge += settings.early.surcharge / 60;
+      } else if (t >= settings.late.start && t < settings.late.end) {
+        surcharge += settings.late.surcharge / 60;
+      }
+    }
+    const totalSurcharge = Math.round(surcharge);
+    const finalQuestPrice = totalQuestPrice + totalSurcharge;
+
+    const deposit = Math.max(1500, Number(quest.depositPerHour) * hours);
+
+    let services: Service[] = [];
+    let servicesPrice = 0;
+    if (createDto.serviceIds?.length) {
+      services = await this.serviceRepository.findBy({
+        id: In(createDto.serviceIds),
+        isActive: true,
+      });
+      servicesPrice = services.reduce((sum, s) => sum + Number(s.price), 0);
+    }
+
+    const finalTotal = finalQuestPrice + servicesPrice;
+    const finalDeposit = deposit;
+
+    const booking = this.bookingRepository.create({
+      userId: createDto.userId,
+      quest,
+      date: createDto.date,
+      startTime: createDto.startTime,
+      endTime: createDto.endTime,
+      childrenCount,
+      comment: createDto.comment,
+      services,
+      totalPrice: finalTotal,
+      totalDeposit: finalDeposit,
+      status: BookingStatus.AWAITING_CLIENT_CONFIRMATION,
+    });
+
+    return this.bookingRepository.save(booking);
+  }
+  async confirmByClient(bookingId: number, userId: number): Promise<Booking> {
+    const booking = await this.findOne(bookingId);
+    if (booking.userId !== userId) {
+      throw new ForbiddenException('Вы не можете подтвердить чужую бронь');
+    }
+    if (booking.status !== BookingStatus.AWAITING_CLIENT_CONFIRMATION) {
+      throw new BadRequestException('Эта бронь не ожидает подтверждения');
+    }
+    booking.status = BookingStatus.PENDING;
+    return this.bookingRepository.save(booking);
   }
 }

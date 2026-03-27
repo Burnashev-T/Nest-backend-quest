@@ -18,6 +18,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/entities/user.entity';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AdminCreateBookingDto } from './dto/admin-create-booking.dto';
 
 @ApiTags('bookings')
 @Controller('bookings')
@@ -95,5 +96,21 @@ export class BookingsController {
   @Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
   async cancelAdmin(@Param('id') id: string) {
     return this.bookingsService.cancel(+id);
+  }
+  @Post('admin-create')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
+  async adminCreate(
+    @Body() createBookingDto: AdminCreateBookingDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.bookingsService.adminCreate(createBookingDto, user.userId);
+  }
+  @Post(':id/confirm-by-client')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async confirmByClient(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.bookingsService.confirmByClient(+id, user.userId);
   }
 }

@@ -1,7 +1,8 @@
 export enum BookingStatus {
-  PENDING = 'pending', // создана, ожидает предоплаты
-  DEPOSIT_PAID = 'deposit_paid', // предоплата получена
-  CONFIRMED = 'confirmed', // подтверждена админом (после звонка)
-  CANCELLED = 'cancelled', // отменена (с возвратом)
-  COMPLETED = 'completed', // услуга оказана, деньги получены наличными
+  PENDING = 'pending', // ожидает предоплаты
+  DEPOSIT_PAID = 'deposit_paid', // предоплата внесена
+  CONFIRMED = 'confirmed', // подтверждена админом
+  CANCELLED = 'cancelled', // отменена
+  COMPLETED = 'completed', // завершена
+  AWAITING_CLIENT_CONFIRMATION = 'awaiting_client_confirmation', // создана менеджером, ждёт подтверждения клиента
 }
