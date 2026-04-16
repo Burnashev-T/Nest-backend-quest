@@ -1,18 +1,30 @@
-// bookings/dto/create-booking.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsString,
   IsNumber,
   IsOptional,
-  IsString,
-  Min,
   IsArray,
   IsDateString,
+  Min,
+  MaxLength,
   Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateBookingDto {
-  @ApiProperty()
+  @ApiProperty({ example: 'Иван Петров' })
+  @IsString()
+  @MaxLength(255)
+  clientName: string;
+
+  @ApiProperty({ example: '+79001234567' })
+  @IsString()
+  @Matches(/^\+7\d{10}$/, {
+    message: 'Телефон должен быть в формате +7XXXXXXXXXX',
+  })
+  clientPhone: string;
+
+  @ApiProperty({ example: 1 })
   @IsNumber()
   @Type(() => Number)
   questId: number;
@@ -23,16 +35,12 @@ export class CreateBookingDto {
 
   @ApiProperty({ example: '15:00' })
   @IsString()
-  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
-    message: 'Время должно быть в формате HH:MM',
-  })
+  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
   startTime: string;
 
   @ApiProperty({ example: '18:00' })
   @IsString()
-  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
-    message: 'Время должно быть в формате HH:MM',
-  })
+  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
   endTime: string;
 
   @ApiProperty({ example: 3 })
@@ -44,9 +52,6 @@ export class CreateBookingDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  @Matches(/^[а-яА-ЯёЁa-zA-Z0-9\s\-\.\,!?]*$/, {
-    message: 'Комментарий содержит недопустимые символы',
-  })
   comment?: string;
 
   @ApiProperty({ type: [Number], required: false })

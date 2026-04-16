@@ -1,5 +1,10 @@
-// blocked-slots/entities/blocked-slot.entity.ts
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  Index,
+} from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Quest } from '../../quests-module/entitys/quest.entity';
 
@@ -13,6 +18,7 @@ export class BlockedSlot {
   @ManyToOne(() => Quest, { onDelete: 'CASCADE', nullable: true })
   quest: Quest | null;
 
+  @Index()
   @ApiProperty({ example: '2025-06-15' })
   @Column({ type: 'date' })
   date: string;

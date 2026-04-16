@@ -8,6 +8,8 @@ import {
   Param,
   Delete,
   UseGuards,
+  BadRequestException,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
@@ -59,17 +61,22 @@ export class UsersController {
     return this.usersService.update(+id, updateUserDto);
   }
 
+  @Delete(':id')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SUPERADMIN)
-  @Delete(':id')
-  async remove(@Param('id') id: string) {
-    return this.usersService.remove(+id);
+  async remove(@Param('id') id: string, @Req() req: any) {
+    const userId = +id;
+    const currentUserId = req.user.userId;
+    if (userId === currentUserId) {
+      throw new BadRequestException('Нельзя удалить самого себя');
+    }
+    return this.usersService.remove(userId);
   }
   @Patch(':id/role')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPERADMIN) // только суперадмин
+  @Roles(UserRole.SUPERADMIN)
   async updateRole(
     @Param('id') id: string,
     @Body() updateRoleDto: UpdateRoleDto,

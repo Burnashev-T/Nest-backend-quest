@@ -7,7 +7,7 @@ export class Setting {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ApiProperty({ example: 'EARLY_HOURS_START' })
+  @ApiProperty({ example: 'NORMAL_HOURS_START, NORMAL_HOURS_END' })
   @Column({ unique: true })
   key: string;
 

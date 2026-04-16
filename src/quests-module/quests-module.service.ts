@@ -1,16 +1,22 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateQuestDto } from './dto/create-quest.dto';
 import { Quest } from './entitys/quest.entity';
 import { MinioService } from '../images/minio.service';
 import { UpdateQuestDto } from './dto/update-quest.dto';
+import BookingsService from '../bookings/bookings.service';
 
 @Injectable()
 export class QuestsService {
   constructor(
     @InjectRepository(Quest)
     private questRepository: Repository<Quest>,
+    private bookingsService: BookingsService,
     private minioService: MinioService,
   ) {}
 
@@ -73,12 +79,24 @@ export class QuestsService {
 
   async remove(id: number): Promise<void> {
     const quest = await this.findOne(id);
-    // Удаляем все связанные изображения
-    for (const key of quest.images || []) {
-      try {
-        await this.minioService.deleteFile(key);
-      } catch (err) {
-        console.error(`Failed to delete file ${key}:`, err);
+    const bookingsCount = await this.bookingsService.countByQuestId(id);
+    if (bookingsCount > 0) {
+      throw new BadRequestException(
+        'Нельзя удалить квест, на который есть бронирования',
+      );
+    }
+    // Удаляем изображения
+    for (const img of quest.images || []) {
+      let key: string | null = null;
+      if (typeof img === 'string') {
+        key = img;
+      } else if (img && typeof img === 'object' && 'key' in img) {
+        key = img.key;
+      }
+      if (key) {
+        await this.minioService
+          .deleteFile(key)
+          .catch((err) => console.error('Delete failed', err));
       }
     }
     await this.questRepository.remove(quest);

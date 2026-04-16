@@ -1,24 +1,24 @@
-// bookings/bookings.controller.ts
 import {
   Controller,
   Get,
   Post,
   Body,
+  Patch,
   Param,
+  Delete,
   Query,
   UseGuards,
-  ForbiddenException,
-  Patch,
+  Req,
+  ParseIntPipe,
+  BadRequestException, NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { BookingsService } from './bookings.service';
+import BookingsService from './bookings.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/entities/user.entity';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { AdminCreateBookingDto } from './dto/admin-create-booking.dto';
 
 @ApiTags('bookings')
 @Controller('bookings')
@@ -36,26 +36,16 @@ export class BookingsController {
     return this.bookingsService.getAvailableSlots(+questId, date);
   }
 
-  // Для авторизованных пользователей
+  // Создание брони – только для админов
   @Post()
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.USER, UserRole.ADMIN, UserRole.SUPERADMIN) // добавьте USER
-  async create(
-    @Body() createBookingDto: CreateBookingDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.bookingsService.create(createBookingDto, user.userId);
+  @Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
+  async create(@Body() createBookingDto: CreateBookingDto, @Req() req: any) {
+    return this.bookingsService.create(createBookingDto, req.user.userId);
   }
 
-  @Get('my')
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  async findMy(@CurrentUser() user: any) {
-    return this.bookingsService.findByUser(user.userId);
-  }
-
-  // Админские эндпоинты
+  // Список всех броней – админ
   @Get()
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -63,54 +53,46 @@ export class BookingsController {
   async findAll() {
     return this.bookingsService.findAll();
   }
-
+  // Статистика – админ
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
+  @Get('stats')
+  async getStats() {
+    return this.bookingsService.getStats();
+  }
   @Get(':id')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
-  async findOne(@Param('id') id: string) {
-    return this.bookingsService.findOne(+id);
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.bookingsService.findOne(id);
   }
-  @Get('stats')
+
+  // Подтверждение брони (если нужно) – админ
+  @Patch(':id/confirm')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
-  async getStats() {
-    return this.bookingsService.getStats();
+  async confirm(@Param('id', ParseIntPipe) id: string) {
+    return this.bookingsService.confirm(+id);
   }
 
+  // Отмена брони – админ
   @Patch(':id/cancel')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  async cancel(@Param('id') id: string, @CurrentUser() user: any) {
-    const booking = await this.bookingsService.findOne(+id);
-    if (booking.userId !== user.userId) {
-      throw new ForbiddenException('Вы можете отменять только свои брони');
-    }
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
+  async cancel(@Param('id', ParseIntPipe) id: string) {
     return this.bookingsService.cancel(+id);
   }
 
-  @Patch(':id/cancel-admin')
+  // Завершение брони – админ
+  @Patch(':id/complete')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
-  async cancelAdmin(@Param('id') id: string) {
-    return this.bookingsService.cancel(+id);
-  }
-  @Post('admin-create')
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
-  async adminCreate(
-    @Body() createBookingDto: AdminCreateBookingDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.bookingsService.adminCreate(createBookingDto, user.userId);
-  }
-  @Post(':id/confirm-by-client')
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  async confirmByClient(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.bookingsService.confirmByClient(+id, user.userId);
+  async complete(@Param('id', ParseIntPipe) id: string) {
+    return this.bookingsService.complete(+id);
   }
 }

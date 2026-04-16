@@ -9,6 +9,8 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { ConfigService } from '@nestjs/config';
 import { ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { v4 as uuidv4 } from 'uuid';
+import * as path from 'path';
 
 @Injectable()
 export class MinioService {
@@ -113,5 +115,15 @@ export class MinioService {
     const index = url.indexOf(prefix);
     if (index === -1) return null;
     return url.substring(index + prefix.length);
+  }
+
+  // Добавь этот метод
+  async uploadToGallery(file: Express.Multer.File): Promise<string> {
+    const fileExt = path.extname(file.originalname);
+    const fileName = `${uuidv4()}${fileExt}`;
+    const key = `quests/gallery/${fileName}`;
+
+    await this.uploadFile(file, key);
+    return `${this.publicEndpoint}/${this.bucket}/${key}`;
   }
 }

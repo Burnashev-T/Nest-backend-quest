@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -55,11 +56,19 @@ export class UsersService {
   }
 
   async remove(id: number): Promise<void> {
+    const user = await this.findOne(id);
+    if (user.role === UserRole.SUPERADMIN) {
+      throw new BadRequestException('Нельзя удалить суперадмина');
+    }
     const result = await this.usersRepository.delete(id);
     if (result.affected === 0) throw new NotFoundException('User not found');
   }
+
   async updateRole(id: number, role: UserRole): Promise<User> {
-    const user = await this.findOne(id); // метод findOne уже должен быть
+    const user = await this.findOne(id);
+    if (user.role === UserRole.SUPERADMIN) {
+      throw new BadRequestException('Нельзя изменить роль суперадмина');
+    }
     user.role = role;
     return this.usersRepository.save(user);
   }

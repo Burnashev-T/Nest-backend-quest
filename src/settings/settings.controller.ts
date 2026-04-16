@@ -20,9 +20,6 @@ import { UserRole } from '../users/entities/user.entity';
 
 @ApiTags('settings')
 @Controller('settings')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.SUPERADMIN) // только суперадмин
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
   @ApiBearerAuth()

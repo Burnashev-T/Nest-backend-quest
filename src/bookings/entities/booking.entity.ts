@@ -5,11 +5,12 @@ import {
   ManyToOne,
   ManyToMany,
   JoinTable,
+  Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Quest } from '../../quests-module/entitys/quest.entity';
-import { BookingStatus } from './booking-enum.entity';
 import { Service } from '../../services-module/entitys/services.entity';
+import { BookingStatus } from './booking-enum.entity';
 
 @Entity('bookings')
 export class Booking {
@@ -17,15 +18,20 @@ export class Booking {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ApiProperty()
+  @ApiProperty({ example: 'Иван Петров' })
   @Column()
-  userId: number;
+  clientName: string;
 
+  @ApiProperty({ example: '+79001234567' })
+  @Column()
+  clientPhone: string;
+
+  @Index()
   @ApiProperty({ type: () => Quest })
   @ManyToOne(() => Quest)
   quest: Quest;
 
-  // 👇 НОВЫЕ ПОЛЯ (дата и время)
+  @Index()
   @ApiProperty({ example: '2025-06-15' })
   @Column({ type: 'date' })
   date: string;
@@ -46,6 +52,7 @@ export class Booking {
   @Column({ nullable: true })
   comment: string;
 
+  @Index()
   @ApiProperty({ enum: BookingStatus })
   @Column({
     type: 'enum',
@@ -56,16 +63,20 @@ export class Booking {
 
   @ApiProperty({ example: 15000 })
   @Column('decimal', { precision: 10, scale: 2 })
-  totalPrice: number; // полная стоимость мероприятия
+  totalPrice: number;
 
   @ApiProperty({ example: 5000 })
   @Column('decimal', { precision: 10, scale: 2 })
-  totalDeposit: number; // сумма предоплаты
+  totalDeposit: number;
 
   @ApiProperty({ type: () => [Service] })
   @ManyToMany(() => Service)
   @JoinTable({ name: 'booking_services' })
   services: Service[];
+
+  @ApiProperty({ example: 1 }) // ID администратора, создавшего бронь
+  @Column({ nullable: true })
+  createdByAdminId: number;
 
   @ApiProperty()
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })

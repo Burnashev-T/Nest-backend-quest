@@ -1,5 +1,5 @@
 // blocked-slots/blocked-slots.module.ts
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BlockedSlotsService } from './blocked-slots.service';
 import { BlockedSlotsController } from './blocked-slots.controller';
@@ -10,7 +10,7 @@ import { Booking } from '../bookings/entities/booking.entity'; // для дос�
 @Module({
   imports: [
     TypeOrmModule.forFeature([BlockedSlot, Booking]),
-    QuestsModuleModule,
+    forwardRef(() => QuestsModuleModule), // <-- добавить forwardRef
   ],
   controllers: [BlockedSlotsController],
   providers: [BlockedSlotsService],
