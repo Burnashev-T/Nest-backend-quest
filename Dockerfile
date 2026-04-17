@@ -1,6 +1,7 @@
 FROM node:20 AS builder
 WORKDIR /app
 COPY package*.json ./
+# Если нет package-lock.json, используем npm install
 RUN npm install
 COPY . .
 RUN npm run build
