@@ -3,7 +3,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-RUN npm run build
+RUN npm run build && \
+    if [ -d "dist/src" ]; then \
+        mv dist/src/* dist/ && \
+        rmdir dist/src; \
+    fi
 
 FROM node:20
 WORKDIR /app
