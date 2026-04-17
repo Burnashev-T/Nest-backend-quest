@@ -1,7 +1,6 @@
 FROM node:20 AS builder
 WORKDIR /app
 COPY package*.json ./
-# Если нет package-lock.json, используем npm install
 RUN npm install
 COPY . .
 RUN npm run build
@@ -11,4 +10,9 @@ WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY package*.json ./
-CMD ["node", "dist/main.js"]
+
+# Отладка: посмотрим, куда попал main.js
+RUN ls -la dist/ && ls -la dist/src/ || true
+
+# Если main.js лежит в dist/src, то запускаем оттуда
+CMD ["node", "dist/src/main.js"]
