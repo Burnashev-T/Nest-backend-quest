@@ -1,19 +1,17 @@
-# Используем Node 20 Alpine
 FROM node:20-alpine
 
-# Создаём рабочую директорию
 WORKDIR /app
 
-# Сначала копируем только package.json и package-lock.json
+# Копируем package.json и package-lock.json
 COPY package*.json ./
 
-# Устанавливаем ВСЕ зависимости (включая devDependencies), чтобы можно было сделать build
+# Устанавливаем ВСЕ зависимости (включая devDependencies для сборки)
 RUN npm ci
 
-# Копируем весь код
+# Копируем весь исходный код
 COPY . .
 
-# Собираем приложение
+# Собираем TypeScript в JavaScript
 RUN npm run build
 
 # Удаляем devDependencies, чтобы уменьшить размер образа
